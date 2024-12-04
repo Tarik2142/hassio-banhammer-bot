@@ -1,5 +1,5 @@
 {
-  "name": "Home Assistant Ring Bridge",
-  "url": "https://github.com/helmut-hoffer-von-ankershoffen/hassio-ring-bridge",
-  "maintainer": "Helmut Hoffer von Ankershoffen <https://helmut.hoffer-von-ankershoffen.me>"
+  "name": "Home Assistant BanHammer bot",
+  "url": "https://github.com/Tarik2142/hassio-banhammer-bot",
+  "maintainer": "Tarik2142 <https://github.com/Tarik2142>"
 }
