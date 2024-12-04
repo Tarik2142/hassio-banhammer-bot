@@ -1,11 +1,17 @@
 {
-  "slug": "ring_bridge",
-  "name": "Ring Bridge",
-  "version": "1.0.2",
-  "url": "https://github.com/helmut-hoffer-von-ankershoffen/hassio-ring-bridge",
+  "slug": "ban_hammer_bot",
+  "name": "BanHammer",
+  "version": "0.0.1",
+  "url": "https://github.com/Tarik2142/hassio-banhammer-bot",
   "stage": "stable",
-  "description": "Bridge to Ring devices. Possible use: Get/set mode of location on presence chance of residents. Built by Helmut Hoffer von Ankershoffen <https://helmut.hoffer-von-ankershoffen.me>",
-  "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
+  "description": "Addon for Home Assistant (Hassio) To ban bots in your Telegram group",
+  "arch": [
+    "armhf",
+    "armv7",
+    "aarch64",
+    "amd64",
+    "i386"
+  ],
   "startup": "services",
   "boot": "auto",
   "ports": {
@@ -16,7 +22,7 @@
   },
   "map": [],
   "options": {
-  	"refresh_token": "Generate by calling 'npx -p ring-client-api ring-auth-cli' on your Mac after installing npm"
+    "bot_token": "Insert your bot token here"
   },
   "schema": {
     "refresh_token": "str"

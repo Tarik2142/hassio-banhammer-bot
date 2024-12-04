@@ -1,8 +1,8 @@
 {
-    "name": "ring_bridge",
-    "version": "1.0.2",
-    "description": "Ring Bridge",
-    "author": "Helmut Hoffer von Ankershoffen <https://helmut.hoffer-von-ankershoffen.me>",
+    "name": "ban_hammer_bot",
+    "version": "0.0.1",
+    "description": "BanHammer",
+    "author": "Tarik2142 https://github.com/Tarik2142",
     "main": "index.js",
     "scripts": {
         "start": "node index.js"
