@@ -1,9 +1,7 @@
 console.log('Initializing BanHammer');
 
-const express = require("express");
 const TelegramBot = require('node-telegram-bot-api');
 const port = 8000;
-const webservice = express();
 const BOT_TOKEN = process.env.BOT_TOKEN; //
 const BOT_BAN_TIME = 0; //Math.round(Date.now() / 1000) + (60 * 10);
 const bot = new TelegramBot(BOT_TOKEN, {
@@ -118,10 +116,6 @@ if (BOT_TOKEN === undefined) {
 			});
 		}
 	});
-
-	webservice.listen(port, () => {
-		console.log(`BanHammer is running on port ${port}.`);
-	})
 }
 
 function deletePool(pool) {
