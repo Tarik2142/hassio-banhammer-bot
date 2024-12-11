@@ -14,7 +14,7 @@ const bot = new TelegramBot(BOT_TOKEN, {
 
 var pollArray = [];
 
-if (BOT_TOKEN === undefined) {
+if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 	console.log("You must set a bot token in the addon config!");
 	process.exit(22);
 } else {
