@@ -91,10 +91,10 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 		const userId = answer.user.id;
 		const answerId = answer.option_ids[0];
 
-		console.log("answer: ", answerId);
-
 		const isFromNewMember = pollArray.find((elem) => (elem.newMemberId === userId) && (elem.pollId === poolId));
 		if (isFromNewMember) {
+			console.log("answer: ", answerId + 1);
+
 			deletePool(isFromNewMember).then(() => {
 				clearTimeout(isFromNewMember.timeoutTimer);
 
