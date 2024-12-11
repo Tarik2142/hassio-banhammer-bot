@@ -1,6 +1,6 @@
 {
     "name": "ban_hammer_bot",
-    "version": "0.0.1",
+    "version": "0.0.4",
     "description": "BanHammer",
     "author": "Tarik2142 https://github.com/Tarik2142",
     "main": "index.js",
@@ -8,7 +8,6 @@
         "start": "node index.js"
     },
     "dependencies": {
-        "express": "^4.17.1",
         "http": "^0.0.0",
         "node-telegram-bot-api": "^0.66.0",
         "url": "^0.11"
