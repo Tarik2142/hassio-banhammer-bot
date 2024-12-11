@@ -1,7 +1,6 @@
 console.log('Initializing BanHammer');
 
 const TelegramBot = require('node-telegram-bot-api');
-const port = 8000;
 const BOT_TOKEN = process.env.BOT_TOKEN; //
 const BOT_BAN_TIME = 0; //Math.round(Date.now() / 1000) + (60 * 10);
 const bot = new TelegramBot(BOT_TOKEN, {
@@ -17,9 +16,8 @@ var pollArray = [];
 if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 	console.log("You must set a bot token in the addon config!");
 	process.exit(22);
-} else {
-	console.log(`Starting BanHammer on port ${port}.`);
 
+} else {
 	bot.on('chat_member', async (message) => {
 		const chatName = message.chat.username;
 		const chat_id = message.chat.id;
@@ -116,6 +114,8 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 			});
 		}
 	});
+
+	console.log(`BanHammer started!`);
 }
 
 function deletePool(pool) {
