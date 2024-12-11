@@ -107,7 +107,7 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 
 					}).then(() => {
 						console.log(`unrestricted: ${isFromNewMember.newMemberUsername}`);
-						bot.sendMessage(isFromNewMember.chatId, `Вітаю в нашій затишній спільноті <a href="tg://user?id=${isFromNewMember.newMemberId}">@${isFromNewMember.newMemberUsername}</a> !\nПеревірте <a href="https://t.me/uasmarthome/4">правила групи</a> та закреп, там багато цікавого`, { parse_mode: "HTML" });
+						bot.sendMessage(isFromNewMember.chatId, `Вітаю в нашій затишній спільноті <a href="tg://user?id=${isFromNewMember.newMemberId}">@${isFromNewMember.newMemberUsername}</a> !\nПеревірте <a href="https://t.me/uasmarthome/4">правила групи</a> та закріплені повідомлення, там багато цікавого`, { parse_mode: "HTML" });
 					});
 				}
 
