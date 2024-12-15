@@ -64,7 +64,10 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 						const poolTmrId = setTimeout(() => {
 							const elem = pollArray.find((o) => o.pollId === pollId);
 							if (elem) {
-								deletePool(elem);
+								kickUser(elem.chatId, elem.newMemberId).finally(() => {
+									console.log(`answer timeout! user: ${elem.newMemberUsername} deleted!`);
+									deletePool(elem);
+								});
 							}
 
 						}, 61 * 1000, chat_id, pollMsgId, pollId);
@@ -106,6 +109,10 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 					}).then(() => {
 						console.log(`unrestricted: ${isFromNewMember.newMemberUsername}`);
 					});
+				} else {
+					kickUser(isFromNewMember.chatId, isFromNewMember.newMemberId).then(() => {
+						console.log(`wrong answer: ${answerId}! user: ${isFromNewMember.newMemberUsername} deleted!`);
+					});
 				}
 
 			}).catch((e) => {
@@ -115,6 +122,23 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 	});
 
 	console.log(`BanHammer started!`);
+}
+
+async function kickUser(chatId, userId) {
+	const until_date = Math.round(Date.now() / 1000) + (60 * 10);
+
+	bot.banChatMember(chatId, userId, {
+		until_date: until_date,
+		revoke_messages: false,
+	}).then(() => {
+		bot.unbanChatMember(chatId, userId).then(() => { return true; }).catch((e) => {
+			console.log(e);
+			return false;
+		});
+	}).catch((e) => {
+		console.log(e);
+		return false;
+	});
 }
 
 function deletePool(pool) {
