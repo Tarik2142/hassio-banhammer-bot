@@ -56,7 +56,7 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 						question_parse_mode: "HTML",
 					}
 
-					bot.sendPoll(chat_id, `Будь ласка, виберіть число <b>${answer.res}</b> нижче щоб підтвердити, що ви не бот:)\nБот працює в тестовому режимі, якщо вас не розбанило - напишіть одному з адмінів`, ["1", "2", "3", "4", "5"], pollOptions).then((resp) => {
+					bot.sendPoll(chat_id, `<a href="tg://user?id=${newMemberId}">@${newMemberUsername}</a>\nБудь ласка, виберіть число <b>${answer.res}</b> нижче щоб підтвердити, що ви не бот:)`, ["1", "2", "3", "4", "5"], pollOptions).then((resp) => {
 						const pollId = resp.poll.id;
 						const pollMsgId = resp.message_id;
 						const messageId = resp.message_id;
