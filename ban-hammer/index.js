@@ -32,8 +32,6 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 			const newMemberUsername = newMember.username ? newMember.username : newMember.first_name;
 			const permissions = new BuildPermissions(false);
 
-			//console.log(`message: `, message);
-
 			if (newUserStatus === "member" && message.old_chat_member && !("can_send_messages" in message.old_chat_member)) {
 				console.log(`new member joined: ${newMemberUsername} newMemberIsBot: ${newMemberIsBot}`);
 
@@ -82,7 +80,7 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 					console.log(e);
 				});
 			} else {
-				console.log(`${newMemberUsername} member status: ${newUserStatus}`);
+				console.log(`${newMemberUsername} status: ${newUserStatus}`);
 			}
 		}
 	});
