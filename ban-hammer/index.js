@@ -6,7 +6,7 @@ const BOT_BAN_TIME = 0; //Math.round(Date.now() / 1000) + (60 * 10);
 const bot = new TelegramBot(BOT_TOKEN, {
 	polling: {
 		params: {
-			"allowed_updates": ["update_id", "message", "inline_query", "chosen_inline_result", "callback_query", "poll", "poll_answer", "my_chat_member", "chat_member"]
+			"allowed_updates": JSON.stringify(["update_id", "message", "inline_query", "chosen_inline_result", "callback_query", "poll", "poll_answer", "my_chat_member", "chat_member"])
 		}
 	}
 });
