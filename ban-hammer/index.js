@@ -22,7 +22,7 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 		const chatName = message.chat.username;
 		const chat_id = message.chat.id;
 		const chat_username = message.chat.username;
-		const isOurChat = chat_username === "ua_test_bans" || chat_username === "uasmarthome";
+		const isOurChat = chat_username === "ua_test_bans" || chat_username === "uasmarthome" || chat_username === "uasmartmarket";
 
 		if (isOurChat) {
 			const newUserStatus = message.new_chat_member.status;
