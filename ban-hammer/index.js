@@ -2,6 +2,8 @@ console.log('Initializing BanHammer');
 
 const TelegramBot = require('node-telegram-bot-api');
 const BOT_TOKEN = process.env.BOT_TOKEN; //
+const BOT_LINKS_BLACKLIST = process.env.BOT_LINKS_BLACKLIST; // some_site.com/fake
+const BOT_CHAT_LIST = process.env.BOT_CHAT_LIST;; // ua_test_bans uasmarthome uasmartmarket
 const BOT_BAN_TIME = 0; //Math.round(Date.now() / 1000) + (60 * 10);
 const bot = new TelegramBot(BOT_TOKEN, {
 	polling: {
@@ -13,18 +15,47 @@ const bot = new TelegramBot(BOT_TOKEN, {
 
 var pollArray = [];
 
+if ((BOT_CHAT_LIST === undefined) || BOT_CHAT_LIST === null) {
+	console.log("You must set a bot chat list in the addon config!");
+	process.exit(22);
+}
+
 if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 	console.log("You must set a bot token in the addon config!");
 	process.exit(22);
 
 } else {
+	bot.on('message', async (message) => {
+		const chat_username = message.chat.username;
+
+		if (BOT_LINKS_BLACKLIST && checkCat(chat_username)) {
+			const chat_id = message.chat.id;
+			const messageId = message.message_id;
+			const msgText = message.text;
+			const username = message.from.username ? message.from.username : message.from.first_name;
+			const badLinksArr = BOT_LINKS_BLACKLIST.split(" ");
+
+			for (const link of badLinksArr) {
+				if (msgText.indexOf(link) !== -1) {
+					console.log(`message from: ${username} contains a blacklisted link: ${link}`);
+
+					setTimeout(() => {
+						bot.deleteMessage(chat_id, messageId).then(() => {
+							console.log("message deleted!");
+
+						}).catch((e) => console.log(e));
+
+					}, 2000, chat_id, messageId);
+				}
+			}
+		}
+	});
+
 	bot.on('chat_member', async (message) => {
-		const chatName = message.chat.username;
 		const chat_id = message.chat.id;
 		const chat_username = message.chat.username;
-		const isOurChat = chat_username === "ua_test_bans" || chat_username === "uasmarthome" || chat_username === "uasmartmarket";
 
-		if (isOurChat) {
+		if (checkCat(chat_username)) {
 			const newUserStatus = message.new_chat_member.status;
 			const newMember = message.new_chat_member.user;
 			const newMemberId = newMember.id;
@@ -120,6 +151,15 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 	});
 
 	console.log(`BanHammer started!`);
+}
+
+function checkCat(name) {
+	const chatList = BOT_CHAT_LIST.split(" ");
+	for (const chat of chatList) {
+		if (chat === name) return true;
+	}
+
+	return false;
 }
 
 async function kickUser(chatId, userId) {

@@ -1,7 +1,7 @@
 {
   "slug": "ban_hammer_bot",
   "name": "BanHammer",
-  "version": "0.0.7",
+  "version": "0.0.9",
   "url": "https://github.com/Tarik2142/hassio-banhammer-bot",
   "stage": "stable",
   "description": "Addon for Home Assistant (Hassio) To ban bots in your Telegram group",
@@ -23,9 +23,13 @@
   },
   "map": [],
   "options": {
-    "bot_token": "Insert your bot token here"
+    "bot_token": "Insert your bot token here",
+    "bot_chat_list": "Insert here chat usernames. space separated",
+    "bot_links_blacklist": "Insert here links to be deleted. space separated"
   },
   "schema": {
-    "bot_token": "str"
+    "bot_token": "str",
+    "bot_chat_list": "str",
+    "bot_links_blacklist": "str"
   }
 }
