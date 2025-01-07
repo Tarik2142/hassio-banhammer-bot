@@ -29,24 +29,29 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 		const chat_username = message.chat.username;
 
 		if (BOT_LINKS_BLACKLIST && checkCat(chat_username)) {
-			const chat_id = message.chat.id;
-			const messageId = message.message_id;
 			const msgText = message.text;
-			const username = message.from.username ? message.from.username : message.from.first_name;
-			const badLinksArr = BOT_LINKS_BLACKLIST.split(" ");
 
-			for (const link of badLinksArr) {
-				if (msgText.indexOf(link) !== -1) {
-					console.log(`message from: ${username} contains a blacklisted link: ${link}`);
+			if (msgText) {
+				const chat_id = message.chat.id;
+				const messageId = message.message_id;
+				const username = message.from.username ? message.from.username : message.from.first_name;
+				const badLinksArr = BOT_LINKS_BLACKLIST.split(" ");
 
-					setTimeout(() => {
-						bot.deleteMessage(chat_id, messageId).then(() => {
-							console.log("message deleted!");
+				for (const link of badLinksArr) {
+					if (msgText.indexOf(link) !== -1) {
+						console.log(`message from: ${username} contains a blacklisted link: ${link}`);
 
-						}).catch((e) => console.log(e));
+						setTimeout(() => {
+							bot.deleteMessage(chat_id, messageId).then(() => {
+								console.log("message deleted!");
 
-					}, 2000, chat_id, messageId);
+							}).catch((e) => console.log(e));
+
+						}, 2000, chat_id, messageId);
+					}
 				}
+			} else {
+				console.log("message: ", message);
 			}
 		}
 	});
