@@ -13,7 +13,9 @@ const bot = new TelegramBot(BOT_TOKEN, {
 	}
 });
 
-var pollArray = [];
+let ignoreAtStartup = true;
+
+const pollArray = [];
 
 if ((BOT_CHAT_LIST === undefined) || BOT_CHAT_LIST === null) {
 	console.log("You must set a bot chat list in the addon config!");
@@ -25,6 +27,10 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 	process.exit(22);
 
 } else {
+	setTimeout(() => {
+		ignoreAtStartup = false;
+	}, 5000);
+
 	bot.on('message', async (message) => {
 		const chat_username = message.chat.username;
 
@@ -57,6 +63,8 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 	});
 
 	bot.on('chat_member', async (message) => {
+		if (ignoreAtStartup) return;
+
 		const chat_id = message.chat.id;
 		const chat_username = message.chat.username;
 
