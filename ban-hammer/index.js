@@ -85,7 +85,7 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 						allows_multiple_answers: false,
 						correct_option_id: answer.num - 1,
 						explanation: "Вітаю, ви бот!",
-						open_period: 60,
+						open_period: 20,
 						disable_notification: true,
 						question_parse_mode: "HTML",
 					}
@@ -104,7 +104,7 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 								});
 							}
 
-						}, 61 * 1000, chat_id, pollMsgId, pollId);
+						}, 21 * 1000, chat_id, pollMsgId, pollId);
 
 						pollArray.push(new PollObject(poolTmrId, pollOptions.correct_option_id, pollId, newMemberId, newMemberUsername, messageId, chat_id));
 
