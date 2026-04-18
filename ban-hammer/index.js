@@ -1,5 +1,6 @@
 console.log('Initializing BanHammer');
 
+const CAS_URL = "https://api.cas.chat/check?user_id=";
 const TelegramBot = require('node-telegram-bot-api');
 const BOT_TOKEN = process.env.BOT_TOKEN; //
 const BOT_LINKS_BLACKLIST = process.env.BOT_LINKS_BLACKLIST; // some_site.com/fake
@@ -84,42 +85,58 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 					...permissions
 
 				}).then(() => {
+					let isCanBanned = false;
+
 					console.log(`restricted: ${newMemberUsername}`);
 
-					const answer = getRandCap();
-					const pollOptions = {
-						is_anonymous: false,
-						"type": "quiz",
-						allows_multiple_answers: false,
-						correct_option_id: answer.num - 1,
-						explanation: "Вітаю, ви бот!",
-						open_period: 20,
-						disable_notification: true,
-						question_parse_mode: "HTML",
-					}
+					fetch(CAS_URL + newMemberId)
+						.then((resp) => resp.json())
+						.then((casJson) => {
+							if (casJson.ok && casJson.result) {
+								console.log(`User ${newMemberUsername}(${newMemberId}) have CAS BAN!`);
+								isCanBanned = true;
+							}
+						})
+						.finally(() => {
+							if (isCanBanned) {
+								bot.sendMessage(chat_id, `<a href="tg://user?id=${newMemberId}">@${newMemberUsername}</a> отримав перманентний мут!\nЯкщо це помилка, напишіть одному з адміністраторів чату.\n<a href="https://cas.chat/query?u=${newMemberId}">Дізнатись причину блокування</a>`, { disable_notification: true }).catch((e) => console.log(e));
 
-					bot.sendPoll(chat_id, `<a href="tg://user?id=${newMemberId}">@${newMemberUsername}</a>\nБудь ласка, виберіть число <b>${answer.res}</b> нижче щоб підтвердити, що ви не бот:)`, ["1", "2", "3", "4", "5"], pollOptions).then((resp) => {
-						const pollId = resp.poll.id;
-						const pollMsgId = resp.message_id;
-						const messageId = resp.message_id;
+							} else {
+								const answer = getRandCap();
+								const pollOptions = {
+									is_anonymous: false,
+									"type": "quiz",
+									allows_multiple_answers: false,
+									correct_option_id: answer.num - 1,
+									explanation: "Вітаю, ви бот!",
+									open_period: 20,
+									disable_notification: true,
+									question_parse_mode: "HTML",
+								}
 
-						const poolTmrId = setTimeout(() => {
-							const elem = pollArray.find((o) => o.pollId === pollId);
-							if (elem) {
-								kickUser(elem.chatId, elem.newMemberId).finally(() => {
-									console.log(`answer timeout! user: ${elem.newMemberUsername} deleted!`);
-									deletePool(elem);
+								bot.sendPoll(chat_id, `<a href="tg://user?id=${newMemberId}">@${newMemberUsername}</a>\nБудь ласка, виберіть число <b>${answer.res}</b> нижче щоб підтвердити, що ви не бот:)`, ["1", "2", "3", "4", "5"], pollOptions).then((resp) => {
+									const pollId = resp.poll.id;
+									const pollMsgId = resp.message_id;
+									const messageId = resp.message_id;
+
+									const poolTmrId = setTimeout(() => {
+										const elem = pollArray.find((o) => o.pollId === pollId);
+										if (elem) {
+											kickUser(elem.chatId, elem.newMemberId).finally(() => {
+												console.log(`answer timeout! user: ${elem.newMemberUsername} deleted!`);
+												deletePool(elem);
+											});
+										}
+
+									}, 21 * 1000, chat_id, pollMsgId, pollId);
+
+									pollArray.push(new PollObject(poolTmrId, pollOptions.correct_option_id, pollId, newMemberId, newMemberUsername, messageId, chat_id));
+
+								}).catch((e) => {
+									console.log(e);
 								});
 							}
-
-						}, 21 * 1000, chat_id, pollMsgId, pollId);
-
-						pollArray.push(new PollObject(poolTmrId, pollOptions.correct_option_id, pollId, newMemberId, newMemberUsername, messageId, chat_id));
-
-					}).catch((e) => {
-						console.log(e);
-					});
-
+						});
 				}).catch((e) => {
 					console.log(e);
 				});
