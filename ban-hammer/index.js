@@ -99,7 +99,7 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 						})
 						.finally(() => {
 							if (isCanBanned) {
-								bot.sendMessage(chat_id, `<a href="tg://user?id=${newMemberId}">@${newMemberUsername}</a> отримав перманентний мут!\nЯкщо це помилка, напишіть одному з адміністраторів чату.\n<a href="https://cas.chat/query?u=${newMemberId}">Дізнатись причину блокування</a>`, { disable_notification: true }).catch((e) => console.log(e));
+								bot.sendMessage(chat_id, `<a href="tg://user?id=${newMemberId}">@${newMemberUsername}</a> отримав перманентний мут!\nЯкщо це помилка, напишіть одному з адміністраторів чату.\n<a href="https://cas.chat/query?u=${newMemberId}">Дізнатись причину блокування</a>`, { parse_mode: "HTML", disable_notification: true }).catch((e) => console.log(e));
 
 							} else {
 								const answer = getRandCap();
