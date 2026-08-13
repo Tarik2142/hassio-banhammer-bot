@@ -2,9 +2,9 @@ console.log('Initializing BanHammer');
 
 const CAS_URL = "https://api.cas.chat/check?user_id=";
 const TelegramBot = require('node-telegram-bot-api');
-const BOT_TOKEN = "8100710657:AAGyrpzN-2TPWXg5dCp6ezcsMAJsquFQrCw";
+const BOT_TOKEN = process.env.BOT_TOKEN;
 const BOT_LINKS_BLACKLIST = process.env.BOT_LINKS_BLACKLIST; // some_site.com/fake
-const BOT_CHAT_LIST = "ua_test_bans" // process.env.BOT_CHAT_LIST; // ua_test_bans uasmarthome uasmartmarket
+const BOT_CHAT_LIST = process.env.BOT_CHAT_LIST;
 const BOT_BAN_TIME = 0; //Math.round(Date.now() / 1000) + (60 * 10);
 const bot = new TelegramBot(BOT_TOKEN, {
 	polling: {
