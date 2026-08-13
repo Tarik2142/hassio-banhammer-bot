@@ -2,9 +2,9 @@ console.log('Initializing BanHammer');
 
 const CAS_URL = "https://api.cas.chat/check?user_id=";
 const TelegramBot = require('node-telegram-bot-api');
-const BOT_TOKEN = process.env.BOT_TOKEN; //
+const BOT_TOKEN = "8100710657:AAGyrpzN-2TPWXg5dCp6ezcsMAJsquFQrCw";
 const BOT_LINKS_BLACKLIST = process.env.BOT_LINKS_BLACKLIST; // some_site.com/fake
-const BOT_CHAT_LIST = process.env.BOT_CHAT_LIST;; // ua_test_bans uasmarthome uasmartmarket
+const BOT_CHAT_LIST = "ua_test_bans" // process.env.BOT_CHAT_LIST; // ua_test_bans uasmarthome uasmartmarket
 const BOT_BAN_TIME = 0; //Math.round(Date.now() / 1000) + (60 * 10);
 const bot = new TelegramBot(BOT_TOKEN, {
 	polling: {
@@ -98,8 +98,14 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 							}
 						})
 						.finally(() => {
-							if (isCanBanned) {
-								bot.sendMessage(chat_id, `<a href="tg://user?id=${newMemberId}">@${newMemberUsername}</a> отримав перманентний мут!\nЯкщо це помилка, напишіть одному з адміністраторів чату.\n<a href="https://cas.chat/query?u=${newMemberId}">Дізнатись причину блокування</a>`, { parse_mode: "HTML", disable_notification: true }).catch((e) => console.log(e));
+							if (isCanBanned || isFemaleName(newMemberUsername)) {
+								bot.sendMessage(chat_id, `<a href="tg://user?id=${newMemberId}">@${newMemberUsername}</a> отримав(ла) перманентний мут!\nЯкщо це помилка, напишіть одному з адміністраторів чату.\n<a href="https://cas.chat/query?u=${newMemberId}">Дізнатись причину блокування</a>`, { parse_mode: "HTML", disable_notification: true })
+									.then((resp) => {
+										setTimeout(() => {
+											bot.deleteMessage(resp.chat.id, resp.message_id).catch(e => console.log(e));
+										}, 60000, resp);
+									})
+									.catch((e) => console.log(e));
 
 							} else {
 								const answer = getRandCap();
@@ -339,4 +345,57 @@ function NumberEncoderEmoji(number) {
 	}
 
 	return result;
+}
+
+/**
+ * Перевіряє, чи є ім'я (українське або російське) жіночим.
+ *
+ * Логіка:
+ * 1. Ім'я нормалізується (обрізаються пробіли, приводиться до нижнього регістру,
+ *    перша літера — до верхнього для порівняння зі списками винятків).
+ * 2. Спочатку перевіряється точний збіг зі списками відомих чоловічих
+ *    і жіночих імен-винятків (бо є чоловічі імена на "а"/"я": Микита, Ілля,
+ *    Микола, Данила, Кузьма тощо; і теоретично жіночі, що на "а"/"я" не закінчуються).
+ * 3. Якщо точного збігу нема — застосовується загальне правило:
+ *    ім'я вважається жіночим, якщо закінчується на "а" або "я".
+ *
+ * @param {string} name - ім'я для перевірки
+ * @returns {boolean|null} true — жіноче, false — чоловіче, null — не вдалось визначити (порожній рядок)
+ */
+function isFemaleName(name) {
+	if (!name || typeof name !== 'string') return null;
+
+	const trimmed = name.trim();
+	if (trimmed.length === 0) return null;
+
+	// Беремо лише перше слово (якщо ввели "Ім'я По батькові" чи "Ім'я Прізвище")
+	const firstWord = trimmed.split(/\s+/)[0];
+
+	// Нормалізація для порівняння (нижній регістр, ё -> е для рос. варіанту)
+	const normalized = firstWord
+		.toLowerCase()
+		.replace(/ё/g, 'е');
+
+	// Список чоловічих імен, що закінчуються на "а"/"я" (виняток із загального правила)
+	const maleExceptions = new Set([
+		// Українські
+		'микита', 'ілля', 'кузьма', 'данила', 'сава', 'хома', 'лука',
+		'микола', 'йона', 'варфоломія', 'вітя', // зменш. форми теж трапляються
+		// Російські
+		'никита', 'илья', 'кузьма', 'данила', 'савва', 'фома', 'лука',
+		'гаврила', 'богдана' // "Богдана" тут як приклад — за потреби прибрати/додати
+	]);
+
+	// Список жіночих імен, що НЕ закінчуються на "а"/"я" (виняток із загального правила)
+	const femaleExceptions = new Set([
+		'любов', 'нінель', 'рахіль', 'есфір', 'юдіф', 'юдифь',
+		'любовь', // рос. варіант
+	]);
+
+	if (maleExceptions.has(normalized)) return false;
+	if (femaleExceptions.has(normalized)) return true;
+
+	// Загальне правило: закінчення на "а" або "я"
+	const lastChar = normalized.charAt(normalized.length - 1);
+	return lastChar === 'а' || lastChar === 'я';
 }
