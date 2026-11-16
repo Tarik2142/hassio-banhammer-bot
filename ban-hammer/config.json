@@ -25,11 +25,13 @@
   "options": {
     "bot_token": "Insert your bot token here",
     "bot_chat_list": "Insert here chat usernames. space separated",
-    "bot_links_blacklist": "Insert here links to be deleted. space separated"
+    "bot_links_blacklist": "Insert here links to be deleted. space separated",
+    "bot_emoji_limit": 15
   },
   "schema": {
     "bot_token": "str",
     "bot_chat_list": "str",
-    "bot_links_blacklist": "str"
+    "bot_links_blacklist": "str",
+    "bot_emoji_limit": "int(0,)"
   }
 }

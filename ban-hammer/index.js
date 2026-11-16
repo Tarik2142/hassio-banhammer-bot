@@ -1,11 +1,19 @@
 console.log('Initializing BanHammer');
 
+const crypto = require('crypto');
 const CAS_URL = "https://api.cas.chat/check?user_id=";
 const TelegramBot = require('node-telegram-bot-api');
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const BOT_LINKS_BLACKLIST = process.env.BOT_LINKS_BLACKLIST; // some_site.com/fake
 const BOT_CHAT_LIST = process.env.BOT_CHAT_LIST;
 const BOT_BAN_TIME = 0; //Math.round(Date.now() / 1000) + (60 * 10);
+// A message with at least this many different emoji (custom emoji told apart by their id)
+// is deleted and its author muted forever; 0 switches the check off.
+const BOT_EMOJI_LIMIT = parseEnvInt(process.env.BOT_EMOJI_LIMIT, 15);
+const CAPTCHA_TIMEOUT_S = 90;
+const CAPTCHA_OPTIONS = 6;
+const NOTICE_TTL_MS = 60000;
+const CAS_TIMEOUT_MS = 10000;
 const bot = new TelegramBot(BOT_TOKEN, {
 	// No timeout by default: a getUpdates request on a connection that died while the
 	// network came up waits forever and polling never resumes. Long polling holds a
@@ -13,14 +21,15 @@ const bot = new TelegramBot(BOT_TOKEN, {
 	request: { timeout: 30000 },
 	polling: {
 		params: {
-			"allowed_updates": JSON.stringify(["update_id", "message", "inline_query", "chosen_inline_result", "callback_query", "poll", "poll_answer", "my_chat_member", "chat_member"])
+			"allowed_updates": JSON.stringify(["message", "edited_message", "callback_query", "chat_member"])
 		}
 	}
 });
 
 let ignoreAtStartup = true;
 
-const pollArray = [];
+// Captchas waiting for an answer: token (in the buttons' callback_data) -> entry
+const pendingCaptchas = new Map();
 
 if ((BOT_CHAT_LIST === undefined) || BOT_CHAT_LIST === null) {
 	console.log("You must set a bot chat list in the addon config!");
@@ -39,7 +48,10 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 	bot.on('message', async (message) => {
 		const chat_username = message.chat.username;
 
-		if (BOT_LINKS_BLACKLIST && checkCat(chat_username)) {
+		if (!checkCat(chat_username)) return;
+		if (await checkEmojiSpam(message)) return;
+
+		if (BOT_LINKS_BLACKLIST) {
 			const msgText = message.text;
 
 			if (msgText) {
@@ -59,12 +71,18 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 							}).catch((e) => console.log(e));
 
 						}, 2000, chat_id, messageId);
+						break;
 					}
 				}
 			} else {
 				console.log("message: ", message);
 			}
 		}
+	});
+
+	// Spammers post something harmless and edit it into an advert later
+	bot.on('edited_message', (message) => {
+		if (checkCat(message.chat.username)) checkEmojiSpam(message);
 	});
 
 	bot.on('chat_member', async (message) => {
@@ -93,7 +111,7 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 
 					console.log(`restricted: ${newMemberUsername}`);
 
-					fetch(CAS_URL + newMemberId)
+					fetch(CAS_URL + newMemberId, { signal: AbortSignal.timeout(CAS_TIMEOUT_MS) })
 						.then((resp) => resp.json())
 						.then((casJson) => {
 							if (casJson.ok && casJson.result) {
@@ -101,49 +119,14 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 								isCanBanned = true;
 							}
 						})
+						.catch((e) => console.log(`CAS check of ${newMemberUsername} failed:`, e.message))
 						.finally(() => {
 							if (isCanBanned || isFemaleName(newMemberUsername)) {
-								bot.sendMessage(chat_id, `<a href="tg://user?id=${newMemberId}">@${newMemberUsername}</a> отримав(ла) перманентний мут!\nЯкщо це помилка, напишіть одному з адміністраторів чату.\n<a href="https://cas.chat/query?u=${newMemberId}">Дізнатись причину блокування</a>`, { parse_mode: "HTML", disable_notification: true })
-									.then((resp) => {
-										setTimeout(() => {
-											bot.deleteMessage(resp.chat.id, resp.message_id).catch(e => console.log(e));
-										}, 60000, resp);
-									})
-									.catch((e) => console.log(e));
+								postNotice(chat_id, `${mention(newMemberId, newMemberUsername)} отримав(ла) перманентний мут!\nЯкщо це помилка, напишіть одному з адміністраторів чату.\n<a href="https://cas.chat/query?u=${newMemberId}">Дізнатись причину блокування</a>`);
 
 							} else {
-								const answer = getRandCap();
-								const pollOptions = {
-									is_anonymous: false,
-									"type": "quiz",
-									allows_multiple_answers: false,
-									correct_option_id: answer.num - 1,
-									explanation: "Вітаю, ви бот!",
-									open_period: 20,
-									disable_notification: true,
-									question_parse_mode: "HTML",
-								}
-
-								bot.sendPoll(chat_id, `<a href="tg://user?id=${newMemberId}">@${newMemberUsername}</a>\nБудь ласка, виберіть число <b>${answer.res}</b> нижче щоб підтвердити, що ви не бот:)`, ["1", "2", "3", "4", "5"], pollOptions).then((resp) => {
-									const pollId = resp.poll.id;
-									const pollMsgId = resp.message_id;
-									const messageId = resp.message_id;
-
-									const poolTmrId = setTimeout(() => {
-										const elem = pollArray.find((o) => o.pollId === pollId);
-										if (elem) {
-											kickUser(elem.chatId, elem.newMemberId).finally(() => {
-												console.log(`answer timeout! user: ${elem.newMemberUsername} deleted!`);
-												deletePool(elem);
-											});
-										}
-
-									}, 21 * 1000, chat_id, pollMsgId, pollId);
-
-									pollArray.push(new PollObject(poolTmrId, pollOptions.correct_option_id, pollId, newMemberId, newMemberUsername, messageId, chat_id));
-
-								}).catch((e) => {
-									console.log(e);
+								startCaptcha(chat_id, newMemberId, newMemberUsername).catch((e) => {
+									console.log(`captcha for ${newMemberUsername} not sent:`, e.message);
 								});
 							}
 						});
@@ -156,36 +139,38 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 		}
 	});
 
-	bot.on("poll_answer", (answer) => {
-		const poolId = answer.poll_id;
-		const userId = answer.user.id;
-		const answerId = answer.option_ids[0];
+	bot.on("callback_query", (query) => {
+		const match = /^cap:([0-9a-f]+):(\d+)$/.exec(query.data || "");
+		if (!match) return;
 
-		const isFromNewMember = pollArray.find((elem) => (elem.newMemberId === userId) && (elem.pollId === poolId));
-		if (isFromNewMember) {
-			console.log("answer: ", answerId + 1);
+		const token = match[1];
+		const entry = pendingCaptchas.get(token);
+		if (!entry) {
+			answerQuery(query, "Ця перевірка вже завершилась.");
+			return;
+		}
+		if (query.from.id !== entry.userId) {
+			answerQuery(query, "Це перевірка для іншого учасника.", true);
+			return;
+		}
 
-			deletePool(isFromNewMember).then(() => {
-				clearTimeout(isFromNewMember.timeoutTimer);
+		dropCaptcha(token, entry);
 
-				if (answerId === isFromNewMember.correctAnswer) {
-					const permissions = new BuildPermissions(true);
+		if (Number(match[2]) === entry.correct) {
+			answerQuery(query, "Дякуємо! Ласкаво просимо.");
+			bot.restrictChatMember(entry.chatId, entry.userId, {
+				until_date: BOT_BAN_TIME,
+				...new BuildPermissions(true)
 
-					bot.restrictChatMember(isFromNewMember.chatId, isFromNewMember.newMemberId, {
-						until_date: BOT_BAN_TIME,
-						...permissions
-
-					}).then(() => {
-						console.log(`unrestricted: ${isFromNewMember.newMemberUsername}`);
-					});
-				} else {
-					kickUser(isFromNewMember.chatId, isFromNewMember.newMemberId).then(() => {
-						console.log(`wrong answer: ${answerId}! user: ${isFromNewMember.newMemberUsername} deleted!`);
-					});
-				}
-
+			}).then(() => {
+				console.log(`captcha passed, unrestricted: ${entry.name}`);
 			}).catch((e) => {
-				console.log(e);
+				console.log(`unrestrict of ${entry.name} failed:`, e.message);
+			});
+		} else {
+			answerQuery(query, "Неправильна відповідь.");
+			kickUser(entry.chatId, entry.userId).then((ok) => {
+				if (ok) console.log(`wrong captcha answer, kicked: ${entry.name}`);
 			});
 		}
 	});
@@ -202,40 +187,50 @@ function checkCat(name) {
 	return false;
 }
 
-async function kickUser(chatId, userId) {
+function parseEnvInt(value, fallback) {
+	const n = parseInt(value, 10);
+	return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+function escapeHtml(text) {
+	return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function mention(userId, name) {
+	return `<a href="tg://user?id=${userId}">${escapeHtml(name)}</a>`;
+}
+
+// A message that deletes itself after NOTICE_TTL_MS
+function postNotice(chatId, html) {
+	bot.sendMessage(chatId, html, { parse_mode: "HTML", disable_notification: true })
+		.then((resp) => {
+			setTimeout(() => deleteMsg(resp.chat.id, resp.message_id), NOTICE_TTL_MS);
+		})
+		.catch((e) => console.log(e));
+}
+
+function deleteMsg(chatId, messageId) {
+	bot.deleteMessage(chatId, messageId).catch((e) => console.log(`delete of message ${messageId} failed:`, e.message));
+}
+
+function answerQuery(query, text, alert = false) {
+	bot.answerCallbackQuery(query.id, { text, show_alert: alert }).catch((e) => console.log(e.message));
+}
+
+// Kick = ban + unban: the user is removed and may join again later
+function kickUser(chatId, userId) {
 	const until_date = Math.round(Date.now() / 1000) + (60 * 10);
 
-	bot.banChatMember(chatId, userId, {
+	return bot.banChatMember(chatId, userId, {
 		until_date: until_date,
 		revoke_messages: false,
-	}).then(() => {
-		bot.unbanChatMember(chatId, userId).then(() => { return true; }).catch((e) => {
-			console.log(e);
+	})
+		.then(() => bot.unbanChatMember(chatId, userId, { only_if_banned: true }))
+		.then(() => true)
+		.catch((e) => {
+			console.log(`kick of ${userId} failed:`, e.message);
 			return false;
 		});
-	}).catch((e) => {
-		console.log(e);
-		return false;
-	});
-}
-
-function deletePool(pool) {
-	const index = pollArray.indexOf(pool);
-	if (index > -1) {
-		pollArray.splice(index, 1);
-	}
-
-	return bot.deleteMessage(pool.chatId, pool.messageId);
-}
-
-function PollObject(timeoutTimer, correctAnswer, pollId, newMemberId, newMemberUsername, messageId, chatId) {
-	this.timeoutTimer = timeoutTimer;
-	this.correctAnswer = correctAnswer;
-	this.newMemberId = newMemberId;
-	this.newMemberUsername = newMemberUsername;
-	this.pollId = pollId;
-	this.messageId = messageId;
-	this.chatId = chatId;
 }
 
 function BuildPermissions(state) {
@@ -255,100 +250,162 @@ function BuildPermissions(state) {
 	this.can_manage_topics = state;
 }
 
-function getRandCap() {
-	let result;
-	const randNumber = Math.floor(Math.random() * 5) + 1;
-	const randMethod = Math.floor(Math.random() * 3) + 1;
+/* ---------- Captcha: inline buttons, one try, only the new member's press counts ---------- */
 
-	console.log(`randNumber: ${randNumber} randMethod: ${randMethod}`);
+// Accusative case: "Натисніть на ..."
+const CAPTCHA_PICTURES = [
+	["🍎", "ЯБЛУКО"], ["🍌", "БАНАН"], ["🍋", "ЛИМОН"], ["🍇", "ВИНОГРАД"], ["🍓", "ПОЛУНИЦЮ"],
+	["🍒", "ВИШНЮ"], ["🥕", "МОРКВУ"], ["🐱", "КОТА"], ["🐶", "СОБАКУ"], ["🐟", "РИБУ"],
+	["🐸", "ЖАБУ"], ["🐝", "БДЖОЛУ"], ["🚗", "АВТОМОБІЛЬ"], ["🚲", "ВЕЛОСИПЕД"], ["✈️", "ЛІТАК"],
+	["🏠", "БУДИНОК"], ["💡", "ЛАМПОЧКУ"], ["🔑", "КЛЮЧ"], ["⚽", "М'ЯЧ"], ["⏰", "БУДИЛЬНИК"],
+];
 
-	switch (randMethod) {
-		case 1:
-			result = NumberEncoderNumber(randNumber);
-			break;
+const NUMBER_WORDS = ["НУЛЬ", "ОДИН", "ДВА", "ТРИ", "ЧОТИРИ", "П'ЯТЬ", "ШІСТЬ", "СІМ", "ВІСІМ", "ДЕВ'ЯТЬ",
+	"ДЕСЯТЬ", "ОДИНАДЦЯТЬ", "ДВАНАДЦЯТЬ", "ТРИНАДЦЯТЬ", "ЧОТИРНАДЦЯТЬ", "П'ЯТНАДЦЯТЬ", "ШІСТНАДЦЯТЬ",
+	"СІМНАДЦЯТЬ", "ВІСІМНАДЦЯТЬ"];
 
-		case 2:
-			result = NumberEncoderString(randNumber);
-			break;
-
-		case 3:
-			result = NumberEncoderEmoji(randNumber);
-			break;
-
-		default:
-			result = NumberEncoderString(randNumber);
-			break;
-	}
-
-	return { num: randNumber, res: result };
+function randInt(n) {
+	return crypto.randomInt(n);
 }
 
-function NumberEncoderNumber(number) {
-	return `${number}`;
+function shuffle(arr) {
+	for (let i = arr.length - 1; i > 0; i--) {
+		const j = randInt(i + 1);
+		[arr[i], arr[j]] = [arr[j], arr[i]];
+	}
+	return arr;
 }
 
-function NumberEncoderString(number) {
-	let result = "";
-
-	switch (number) {
-		case 1:
-			result = "ОДИН"
-			break;
-
-		case 2:
-			result = "ДВА"
-			break;
-
-		case 3:
-			result = "ТРИ"
-			break;
-
-		case 4:
-			result = "ЧОТИРИ"
-			break;
-
-		case 5:
-			result = "П'ЯТЬ"
-			break;
-
-		default:
-			result = "ОДИН"
-			break;
+// { question (HTML), options (button texts), correct (index into options) }
+function makeCaptcha() {
+	switch (randInt(3)) {
+		case 0: { // arithmetic, answer 1..18
+			const a = 1 + randInt(9);
+			const b = 1 + randInt(9);
+			const plus = a === b || randInt(2) === 0;
+			const x = plus ? a : Math.max(a, b);
+			const y = plus ? b : Math.min(a, b);
+			return numberCaptcha(`Скільки буде <b>${x} ${plus ? "+" : "−"} ${y}</b>?`, plus ? x + y : x - y);
+		}
+		case 1: { // a number written as a word
+			const answer = 1 + randInt(NUMBER_WORDS.length - 1);
+			return numberCaptcha(`Натисніть на число <b>${NUMBER_WORDS[answer]}</b>`, answer);
+		}
+		default: { // a picture named in words
+			const picks = shuffle(CAPTCHA_PICTURES.slice()).slice(0, CAPTCHA_OPTIONS);
+			const correct = randInt(picks.length);
+			return { question: `Натисніть на <b>${picks[correct][1]}</b>`, options: picks.map((p) => p[0]), correct };
+		}
 	}
-
-	return result;
 }
 
-function NumberEncoderEmoji(number) {
-	let result = "";
+function numberCaptcha(question, answer) {
+	const values = new Set([answer]);
+	while (values.size < CAPTCHA_OPTIONS) values.add(1 + randInt(NUMBER_WORDS.length - 1));
+	const options = shuffle([...values]);
+	return { question, options: options.map(String), correct: options.indexOf(answer) };
+}
 
-	switch (number) {
-		case 1:
-			result = "1️⃣"
-			break;
-
-		case 2:
-			result = "2️⃣"
-			break;
-
-		case 3:
-			result = "3️⃣"
-			break;
-
-		case 4:
-			result = "4️⃣"
-			break;
-
-		case 5:
-			result = "5️⃣"
-			break;
-
-		default:
-			result = "1️⃣"
-			break;
+async function startCaptcha(chatId, userId, name) {
+	// Joined again while the old captcha still runs: only the new one counts
+	for (const [token, entry] of pendingCaptchas) {
+		if (entry.chatId === chatId && entry.userId === userId) dropCaptcha(token, entry);
 	}
 
-	return result;
+	const captcha = makeCaptcha();
+	const token = crypto.randomBytes(6).toString("hex");
+	const buttons = captcha.options.map((text, i) => ({ text, callback_data: `cap:${token}:${i}` }));
+	const keyboard = [];
+	for (let i = 0; i < buttons.length; i += 3) keyboard.push(buttons.slice(i, i + 3));
+
+	const msg = await bot.sendMessage(chatId,
+		`${mention(userId, name)}, підтвердіть, що ви не бот.\n${captcha.question}\nУ вас ${CAPTCHA_TIMEOUT_S} секунд і одна спроба.`,
+		{ parse_mode: "HTML", disable_notification: true, reply_markup: { inline_keyboard: keyboard } });
+
+	const entry = { chatId, userId, name, correct: captcha.correct, messageId: msg.message_id };
+	entry.timer = setTimeout(() => {
+		if (pendingCaptchas.get(token) !== entry) return;
+		dropCaptcha(token, entry);
+		kickUser(chatId, userId).then((ok) => {
+			if (ok) console.log(`captcha timeout, kicked: ${name}`);
+		});
+	}, CAPTCHA_TIMEOUT_S * 1000);
+	pendingCaptchas.set(token, entry);
+	console.log(`captcha sent to ${name}, answer: ${captcha.options[captcha.correct]}`);
+}
+
+function dropCaptcha(token, entry) {
+	pendingCaptchas.delete(token);
+	clearTimeout(entry.timer);
+	deleteMsg(entry.chatId, entry.messageId);
+}
+
+/* ---------- Emoji spam: adverts drawn with (custom) emoji letters ---------- */
+
+const PICTOGRAPH_RE = /\p{Extended_Pictographic}/gu;
+
+// Number of different emoji in a text. A custom emoji counts by its id; its text is a
+// stand-in emoji, so its range is left out of the plain emoji count.
+function countDistinctEmoji(text, entities) {
+	if (!text) return 0;
+
+	const seen = new Set();
+	let plain = "";
+	let pos = 0;
+	const custom = (entities || []).filter((e) => e.type === "custom_emoji").sort((a, b) => a.offset - b.offset);
+	for (const e of custom) {
+		seen.add("custom:" + e.custom_emoji_id);
+		if (e.offset > pos) plain += text.slice(pos, e.offset);
+		pos = Math.max(pos, e.offset + e.length);
+	}
+	plain += text.slice(pos);
+
+	for (const ch of plain.match(PICTOGRAPH_RE) || []) seen.add(ch);
+	return seen.size;
+}
+
+// true when the message was emoji spam (deleted, author muted forever)
+async function checkEmojiSpam(message) {
+	try {
+		if (!BOT_EMOJI_LIMIT || message.is_automatic_forward) return false;
+
+		const count = message.text !== undefined
+			? countDistinctEmoji(message.text, message.entities)
+			: countDistinctEmoji(message.caption, message.caption_entities);
+		if (count < BOT_EMOJI_LIMIT) return false;
+
+		const chatId = message.chat.id;
+		const sender = message.sender_chat; // posted as a channel or as the anonymous admin
+		if (sender && sender.id === chatId) return false;
+		if (!sender) {
+			const member = await bot.getChatMember(chatId, message.from.id).catch(() => null);
+			if (member && (member.status === "creator" || member.status === "administrator")) return false;
+		}
+
+		const name = sender
+			? (sender.title || sender.username)
+			: (message.from.username ? message.from.username : message.from.first_name);
+		console.log(`emoji spam from ${name}: ${count} different emoji, message deleted`);
+		deleteMsg(chatId, message.message_id);
+
+		if (sender) {
+			// A channel cannot be restricted: banning it stops everyone posting as it here
+			await bot.banChatSenderChat(chatId, sender.id);
+			postNotice(chatId, `Канал <b>${escapeHtml(name)}</b> заблоковано за спам.`);
+		} else {
+			await bot.restrictChatMember(chatId, message.from.id, {
+				until_date: 0, // forever
+				...new BuildPermissions(false)
+			});
+			postNotice(chatId, `${mention(message.from.id, name)} отримав(ла) перманентний мут за спам.\nЯкщо це помилка, напишіть одному з адміністраторів чату.`);
+		}
+		console.log(`muted forever: ${name}`);
+		return true;
+
+	} catch (e) {
+		console.log("emoji spam check failed:", e.message);
+		return false;
+	}
 }
 
 /**
