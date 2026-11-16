@@ -7,6 +7,10 @@ const BOT_LINKS_BLACKLIST = process.env.BOT_LINKS_BLACKLIST; // some_site.com/fa
 const BOT_CHAT_LIST = process.env.BOT_CHAT_LIST;
 const BOT_BAN_TIME = 0; //Math.round(Date.now() / 1000) + (60 * 10);
 const bot = new TelegramBot(BOT_TOKEN, {
+	// No timeout by default: a getUpdates request on a connection that died while the
+	// network came up waits forever and polling never resumes. Long polling holds a
+	// request up to params.timeout (10 s), so this must be longer than that.
+	request: { timeout: 30000 },
 	polling: {
 		params: {
 			"allowed_updates": JSON.stringify(["update_id", "message", "inline_query", "chosen_inline_result", "callback_query", "poll", "poll_answer", "my_chat_member", "chat_member"])
