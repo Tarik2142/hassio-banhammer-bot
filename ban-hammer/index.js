@@ -10,6 +10,8 @@ const BOT_BAN_TIME = 0; //Math.round(Date.now() / 1000) + (60 * 10);
 // A message with at least this many different emoji (custom emoji told apart by their id)
 // is deleted and its author muted forever; 0 switches the check off.
 const BOT_EMOJI_LIMIT = parseEnvInt(process.env.BOT_EMOJI_LIMIT, 15);
+// Extra words of advert names (space separated, matched like the built-in ones: see spamNameReason())
+const BOT_NAME_BLACKLIST = (process.env.BOT_NAME_BLACKLIST || "").split(/\s+/).filter((w) => w && w !== "null");
 const CAPTCHA_TIMEOUT_S = 90;
 const CAPTCHA_OPTIONS = 6;
 const NOTICE_TTL_MS = 60000;
@@ -49,6 +51,7 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 		const chat_username = message.chat.username;
 
 		if (!checkCat(chat_username)) return;
+		if (await checkNameSpam(message)) return;
 		if (await checkEmojiSpam(message)) return;
 
 		if (BOT_LINKS_BLACKLIST) {
@@ -101,6 +104,13 @@ if ((BOT_TOKEN === undefined) || BOT_TOKEN === null) {
 
 			if (newUserStatus === "member" && message.old_chat_member && !("can_send_messages" in message.old_chat_member)) {
 				console.log(`new member joined: ${newMemberUsername} newMemberIsBot: ${newMemberIsBot}`);
+
+				// An advert in the name: out at once, no captcha that would show the name for 90 s
+				const nameReason = spamNameReason(newMember);
+				if (nameReason) {
+					banSpamName(chat_id, newMember, nameReason);
+					return;
+				}
 
 				bot.restrictChatMember(chat_id, newMemberId, {
 					until_date: BOT_BAN_TIME,
@@ -404,6 +414,94 @@ async function checkEmojiSpam(message) {
 
 	} catch (e) {
 		console.log("emoji spam check failed:", e.message);
+		return false;
+	}
+}
+
+/* ---------- Adverts in the name: "💋💛ДЕ!ЦК.ОЕ ПОР!Н.О В ПР.ОФ!ИЛЕ💋💛" ---------- */
+
+// Matched at the start of a word of the name (a phrase: of its first word) after punctuation inside
+// words is dropped ("ПОР!Н.О В ПР.ОФ!ИЛЕ" -> "порно в профиле"), emoji, spaces and "_" separate words;
+// also with look-alike Latin and Cyrillic letters swapped either way ("пoрнo" with Latin "o")
+const NAME_WORDS = [
+	"порн", "porn", "профил", "профіл", "в био", "в біо", "in bio", "секс", "sex", "интим", "інтим",
+	"эскорт", "ескорт", "escort", "знакомств", "знайомств", "заработ", "заробіт", "заробит",
+	"onlyfans", "nude", "хентай", "шлюх", "казино", "casino", "18+",
+	...BOT_NAME_BLACKLIST.map((w) => w.toLowerCase()),
+];
+const NAME_LINK_RE = /t\.me\/|https?:\/\/|www\.|\.(?:com|net|org|ru|me|io|xyz|top|site|online|link|shop|club)\b/i;
+// A letter, punctuation, a letter: "ДЕ!ЦК.ОЕ" (names with initials have two at most: "J.R.R.")
+const NAME_SPLIT_WORD_RE = /\p{L}[!.*_|•·,:;]+(?=\p{L})/gu;
+const NAME_BOT_RE = /(?:bot|бот)(?:$|[^\p{L}])/iu; // a word ending in "bot": "LoveBot", "LAD 76 BOT"
+const LAT_TO_CYR = { a: "а", c: "с", e: "е", h: "н", i: "і", k: "к", m: "м", o: "о", p: "р", t: "т", x: "х", y: "у" };
+const CYR_TO_LAT = { а: "a", в: "b", е: "e", і: "i", к: "k", м: "m", н: "h", о: "o", р: "p", с: "c", т: "t", у: "y", х: "x" };
+
+function swapLetters(text, map) {
+	return text.replace(/./gu, (ch) => map[ch] || ch);
+}
+
+// Why the user's name is an advert, or null when it is not
+function spamNameReason(user) {
+	const name = [user.first_name, user.last_name].filter(Boolean).join(" ");
+	const all = [name, user.username].filter(Boolean).join(" ");
+	if (!all) return null;
+
+	if (NAME_LINK_RE.test(all)) return "link in the name";
+
+	const words = " " + all.toLowerCase().replace(/ё/g, "е")
+		.replace(/[\s_]+|\p{Extended_Pictographic}|️|‍/gu, " ")
+		.replace(/[^\p{L}\p{N}+ ]/gu, "")
+		.replace(/ +/g, " ").trim();
+	const variants = [words, swapLetters(words, LAT_TO_CYR), swapLetters(words, CYR_TO_LAT)];
+	for (const word of NAME_WORDS) {
+		if (variants.some((v) => v.includes(" " + word))) return `word "${word}" in the name`;
+	}
+
+	const splitWords = (name.match(NAME_SPLIT_WORD_RE) || []).length;
+	if (splitWords >= 3) return `${splitWords} words split by punctuation`;
+
+	// Each of these alone is a normal name ("Олена 💙💛", a long double surname)
+	const weak = [];
+	if ((name.match(PICTOGRAPH_RE) || []).length >= 4) weak.push("many emoji");
+	if (name.length >= 40) weak.push("long name");
+	if (splitWords > 0) weak.push("split words");
+	if (NAME_BOT_RE.test(name)) weak.push("\"bot\" in the name");
+	return weak.length >= 2 ? weak.join(", ") : null;
+}
+
+function banSpamName(chatId, user, reason) {
+	console.log(`advert in the name of ${user.id} (${reason}): banned`);
+	bot.banChatMember(chatId, user.id, { until_date: 0, revoke_messages: true })
+		.catch((e) => console.log(`ban of ${user.id} failed:`, e.message));
+}
+
+// Removes what shows an advert name: the "joined" / "removed" service messages, and a message
+// of a member who renamed himself into an advert after joining (banned as well).
+// true when the message was dealt with.
+async function checkNameSpam(message) {
+	try {
+		const chatId = message.chat.id;
+		const service = (message.new_chat_members || []).concat(message.left_chat_member || []);
+		if (service.length) {
+			if (!service.some((u) => spamNameReason(u))) return false;
+			deleteMsg(chatId, message.message_id);
+			return true;
+		}
+
+		const user = message.from;
+		if (!user || message.sender_chat) return false;
+		const reason = spamNameReason(user);
+		if (!reason) return false;
+
+		const member = await bot.getChatMember(chatId, user.id).catch(() => null);
+		if (member && (member.status === "creator" || member.status === "administrator")) return false;
+
+		deleteMsg(chatId, message.message_id);
+		banSpamName(chatId, user, reason);
+		return true;
+
+	} catch (e) {
+		console.log("name spam check failed:", e.message);
 		return false;
 	}
 }

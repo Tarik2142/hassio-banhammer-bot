@@ -9,6 +9,8 @@ bashio::log.info "BOT_CHAT_LIST configured to ${BOT_CHAT_LIST}"
 bashio::log.info "BOT_LINKS_BLACKLIST configured to ${BOT_LINKS_BLACKLIST}"
 export BOT_EMOJI_LIMIT=$(bashio::config 'bot_emoji_limit')
 bashio::log.info "BOT_EMOJI_LIMIT configured to ${BOT_EMOJI_LIMIT}"
+export BOT_NAME_BLACKLIST=$(bashio::config 'bot_name_blacklist')
+bashio::log.info "BOT_NAME_BLACKLIST configured to ${BOT_NAME_BLACKLIST}"
 
 bashio::log.info "Starting ban service."
 npm run start
